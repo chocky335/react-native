@@ -1,0 +1,76 @@
+--- a/apps/basic-example/android/app/build.gradle
++++ b/apps/basic-example/android/app/build.gradle
+@@ -94,7 +94,7 @@
+ 
+     namespace "com.basicexample"
+     defaultConfig {
+-        applicationId "com.basicexample"
++        applicationId "com.rngh.issue4622"
+         minSdkVersion rootProject.ext.minSdkVersion
+         targetSdkVersion rootProject.ext.targetSdkVersion
+         versionCode 1
+--- a/apps/basic-example/android/app/src/main/java/com/basicexample/MainApplication.kt
++++ b/apps/basic-example/android/app/src/main/java/com/basicexample/MainApplication.kt
+@@ -1,6 +1,7 @@
+ package com.basicexample
+ 
+ import android.app.Application
++import com.facebook.react.shell.MainReactPackage
+ import com.facebook.react.PackageList
+ import com.facebook.react.ReactApplication
+ import com.facebook.react.ReactHost
+@@ -19,7 +20,7 @@
+         PackageList(this).packages.apply {
+           // Packages that cannot be autolinked yet can be added manually here, for example:
+           // add(MyReactNativePackage())
+-        },
++        }.map { if (it is MainReactPackage) Issue4622MainPackage(it) else it },
+     )
+   }
+ 
+--- /dev/null
++++ b/apps/basic-example/android/app/src/main/java/com/basicexample/Issue4622MainPackage.kt
+@@ -0,0 +1,43 @@
++package com.basicexample
++
++import android.text.InputType
++import android.util.Log
++import android.view.MotionEvent
++import android.view.ViewGroup
++import com.facebook.react.BaseReactPackage
++import com.facebook.react.ViewManagerOnDemandReactPackage
++import com.facebook.react.bridge.ReactApplicationContext
++import com.facebook.react.shell.MainReactPackage
++import com.facebook.react.uimanager.ThemedReactContext
++import com.facebook.react.views.textinput.ReactEditText
++import com.facebook.react.views.textinput.ReactTextInputManager
++
++// Diagnostic replacement only. All native modules and other views delegate to RN.
++class Issue4622MainPackage(private val original: MainReactPackage) :
++  BaseReactPackage(), ViewManagerOnDemandReactPackage {
++  override fun getModule(name: String, context: ReactApplicationContext) = original.getModule(name, context)
++  override fun getReactModuleInfoProvider() = original.getReactModuleInfoProvider()
++  override fun getViewManagerNames(context: ReactApplicationContext) = original.getViewManagerNames(context)
++  override fun createViewManagers(context: ReactApplicationContext) =
++    original.createViewManagers(context).map { if (it is ReactTextInputManager) InputManager() else it }
++  override fun createViewManager(context: ReactApplicationContext, name: String) =
++    if (name == ReactTextInputManager.REACT_CLASS) InputManager() else original.createViewManager(context, name)
++
++  class InputManager : ReactTextInputManager() {
++    override fun createViewInstance(context: ThemedReactContext): ReactEditText {
++      val input = object : ReactEditText(context) {
++        override fun onTouchEvent(event: MotionEvent): Boolean {
++          if (!isEnabled) {
++            Log.i("Issue4622", "disabled input ignored action=${event.actionMasked}")
++            return false
++          }
++          return super.onTouchEvent(event)
++        }
++      }
++      input.inputType = input.inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE.inv()
++      input.returnKeyType = "done"
++      input.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
++      return input
++    }
++  }
++}
